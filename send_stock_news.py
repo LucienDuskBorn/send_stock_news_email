@@ -1,6 +1,4 @@
 #循环访问股票信息接口api,地址https://so.eastmoney.com/news/s?keyword=603777
-from time import sleep
-
 import akshare as ak
 import os
 import re
@@ -8,7 +6,6 @@ import pandas as pd
 import logging
 import socket
 import time
-from datetime import  timedelta
 import re
 import certifi
 import ssl
@@ -19,19 +16,14 @@ import chardet
 from email.header import Header
 from email.mime.text import MIMEText
 from datetime import datetime
-from dateutil import parser
+
 logger = logging.getLogger()
 """如果当日有新闻，则发送邮件到邮箱"""
 # 配置SMTP服务器
-# SMTP_SERVER = 'smtp.139.com'  # 139邮箱SMTP服务器
-# SMTP_PORT = 465                     # SSL端口
-# SENDER_EMAIL = '15254089945@139.com'  # 发件邮箱
-# SENDER_PASSWORD = '7f6a6c6d536c34e7a600'  # 授权码
-
-SMTP_SERVER = 'smtp.qq.com'  # 139邮箱SMTP服务器
-SMTP_PORT = 465                     # SSL端口
-SENDER_EMAIL = '1658727567@qq.com'  # 发件邮箱
-SENDER_PASSWORD = 'kehjabrnwhinbeff'  # 授权码
+SMTP_SERVER = 'smtp.139.com'  # 139邮箱SMTP服务器
+SMTP_PORT = 25                     # SSL端口
+SENDER_EMAIL = '15254089945@139.ccom'  # 发件邮箱
+SENDER_PASSWORD = '7f6a6c6d536c34e7a600'  # 授权码
 
 def check_network_connection(host, port, timeout=10):
     """检查网络连接是否正常"""
@@ -45,7 +37,7 @@ def check_network_connection(host, port, timeout=10):
         print(f"✗ 无法连接到服务器: {str(e)}")
         return False
 
-def send_email(stock_content):
+def send_email(missing_files):
     # 1. 检查网络连接
     print("检查网络连接...")
     if not check_network_connection(SMTP_SERVER, SMTP_PORT):
@@ -120,43 +112,13 @@ def send_email(stock_content):
         logger.error("无法建立邮件服务器连接")
         return False
 
-    RECEIVE_EMAIL = "15254089945@139.com"
+    RECEIVE_EMAIL = "1658727567@qq.com"
     subject = "有新的股票新闻"
-    body = """
-        <html>
-        <head></head>
-        <body>
-        <h1>股票信息</h1>
-        <table>
-        <tr>
-            <th>股票代码</th>
-            <th>新闻标题</th>
-            <th>发布时间</th>
-            <th>网址</th>
-        </tr>
-        """
+    
     # 创建邮件内容
-    # body = ''
-    if not stock_content.empty:
-        for index, row in stock_content.iterrows():
-            body += f"""
-            <tr class="category-header">
-                <td colspan="3">{row['keyword']}</td>
-                <td colspan="3">{row['news_headline']}</td>
-                <td colspan="3">{row['release_time']}</td>
-                <td colspan="3"><a href="{row['news_link']}">{row['news_link']}</td>
-            </tr>
-            """
-    # 完成HTML内容
-    body += """
-        </table>
-        <p>发件人：赵松彪</p>
-        <p>谢谢！<br></p>
-    </body>
-    </html>
-    """
+    body = f"股票代码:\n\n" + "\n".join(missing_files)
     # 构建邮件
-    msg = MIMEText(body, 'html', 'utf-8')
+    msg = MIMEText(body, 'plain', 'utf-8')
     msg['From'] = Header(SENDER_EMAIL)
     msg['To'] = Header(RECEIVE_EMAIL)
     msg['Subject'] = Header(subject, 'utf-8')
@@ -167,62 +129,45 @@ def send_email(stock_content):
         logger.info(f"成功发送至: {RECEIVE_EMAIL}")
         print(f"✓ 成功发送至: {RECEIVE_EMAIL}")
         server.quit()
-        print("邮件发送成功")
+        print("邮件发送成功：已通知缺失文件")
         return True
     except Exception as e:
         print(f"邮件发送失败: {str(e)}")
         return False
 
 #股票新闻查询
-def monitor_stock_news(symbol_data)->pd.DataFrame:
-    stock_news_em_df = ak.stock_news_em(symbol_data)
+def monitor_stock_news():
+    stock_news_em_df = ak.stock_news_em(symbol="01810")
     data_news= {
         "keyword": [],
-        "news_headline": [],
+        "news_handlines": [],
         "news_content": [],
         "release_time": [],
         "article_source": [],
         "news_link": []
     }
-    data_news = pd.DataFrame(data_news)
     for index, row in stock_news_em_df.iterrows():
         #获取当前时间
         date_now = datetime.now().strftime('%Y-%m-%d')
-
-        date_now_minutes = datetime.now()
-
-        # 计算5分钟前的时间
-        three_minutes_ago = date_now_minutes - timedelta(minutes=5)
-
         #新闻发布时间和当前时间一致，处理当前内容
-        # 转换为datetime类型
-        row['发布时间']= pd.to_datetime(row['发布时间'])
-        if row['发布时间'].strftime("%Y-%m-%d") == date_now:
-            if three_minutes_ago < row['发布时间']:
-                #创建DataFrame数据
-                data_news_frame = {
-                    "keyword": row['关键词'],
-                    "news_headline": row["新闻标题"],
-                    "news_content": row['新闻内容'],
-                    "release_time": row['发布时间'],
-                    "article_source": row['文章来源'],
-                    "news_link": row["新闻链接"]
-                }
-                data_news_frame = pd.DataFrame(data_news_frame,index=[0])
-                data_news = pd.concat([data_news, data_news_frame], ignore_index=True)  # 将新行添加到原始DataFrame
-            else:
-                continue
-    return data_news
+        if row['发布时间'].strftime('%Y-%m-%d') == date_now:
+            #创建DataFrame数据
+            data_news_frame = {
+                "keyword": row['关键词'],
+                "news_handlines": row["新闻标题"],
+                "news_content": row['新闻内容'],
+                "release_time": row['发布时间'],
+                "article_source": row['文章来源'],
+                "news_link": [row["新闻链接"]]
+            }
+            data_news = pd.concat([data_news, data_news_frame], ignore_index=True)  # 将新行添加到原始DataFrame
+        else:
+            continue
+    print(data_news)
 
 if __name__ == "__main__":
     #调用股票信息查询方法
-    list_data = ["NVO", "MSFT", "01810", "06936", "01519"]
-    n=0
-    while True:
-        for symbol in list_data:
-            data = monitor_stock_news(symbol)
-            if data.shape[0] > 1:
-                send_email(data)
-        sleep(300)
-        n +=1
-        print(f"运行{n}次")
+    monitor_stock_news()
+    print("=" * 50)
+    print("文件处理程序启动")
+    print("=" * 50)
